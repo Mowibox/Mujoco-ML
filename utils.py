@@ -70,8 +70,8 @@ def euclidean_error(true_pos: tuple, pred_pos: tuple) -> float:
     """
     Computes the euclidian error between the real and the predicted error.
     
-    @param true_pos: The real position.
-    @param pred_pos: The predicted position.
+    @param true_pos: The real position
+    @param pred_pos: The predicted position
     """
     return np.sqrt((true_pos[0] - pred_pos[0])**2 + (true_pos[1] - pred_pos[1])**2)
 
@@ -120,9 +120,9 @@ def dispFK_2R(model: Model, theta: tuple, display_error: bool=False):
     """
     Plots the Forward Kinematics 2R comparison between Analytical method and ML model.
 
-    model: The end-effector predicted position
-    theta: The joint angles for the 2R robot
-    display_error: Boolean to compute the euclidian error between analytical and ML
+    @param model: The end-effector predicted position
+    @param theta: The joint angles for the 2R robot
+    @param display_error: Boolean to compute the euclidian error between analytical and ML
     """
     ee_x_pred, ee_y_pred = model 
 
@@ -162,9 +162,9 @@ def dispFK_3R(model: Model, theta: tuple, display_error: bool=False):
     """
     Plots the Forward Kinematics 3R comparison between Analytical method and ML model.
 
-    model: The end-effector predicted position
-    theta: The joint angles for the 3R robot
-    display_error: Boolean to compute the euclidian error between analytical and ML
+    @param model: The end-effector predicted position
+    @param theta: The joint angles for the 3R robot
+    @param display_error: Boolean to compute the euclidian error between analytical and ML
     """
     ee_x_pred, ee_y_pred = model 
 
