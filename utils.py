@@ -11,13 +11,13 @@
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
+import tensorflow.keras.backend as K
 
 
 # Robot parameters
 l1 = 0.1  # First link
 l2 = 0.1  # Second link
 l3 = 0.1  # Third link
-
 
 
 class Model:
@@ -48,29 +48,62 @@ def displayLearningCurve(history, epochs: int):
     plt.show()
 
 
-def FK(model: Model, theta: tuple):
+def angular_loss(theta: float, phi: float):
+    """
+    Computes the squared Euclidean distance on the unit circle.
+    
+    
+    @param theta: Ground truth angles (in radians).
+    @param phi: Predicted angles (in radians).
+
+    """
+    theta = tf.convert_to_tensor(theta)
+    phi = tf.convert_to_tensor(phi)
+
+    # Compute the cosine of the angular differences
+    loss = 2 - 2 * tf.cos(theta - phi)
+
+    return K.mean(loss)
+
+
+def euclidean_error(true_pos: tuple, pred_pos: tuple) -> float:
+    """
+    Computes the euclidian error between the real and the predicted error.
+    
+    @param true_pos: The real position.
+    @param pred_pos: The predicted position.
+    """
+    return np.sqrt((true_pos[0] - pred_pos[0])**2 + (true_pos[1] - pred_pos[1])**2)
+
+
+def FK(model: Model, theta: tuple, raw: bool):
     """
     Predicts the Forward Kinematics for a defined set of angles
     @param model: The machine learning model
     @param theta: The tuple of angle inputs
+    @param raw: To specify if we use raw angles or cosines features
     """
-    theta = tf.convert_to_tensor(theta, dtype=tf.float32) 
-    n = theta.shape[0]
-    if n == 2:    # 2R Robot
-        features = tf.stack([tf.cos(theta[0]), tf.sin(theta[0]),
-                             tf.cos(theta[1]), tf.sin(theta[1])])
-    elif n == 3:  # 3R Robot
-        features = tf.stack([tf.cos(theta[0]), tf.sin(theta[0]),
-                             tf.cos(theta[1]), tf.sin(theta[1]),
-                             tf.cos(theta[2]), tf.sin(theta[2])])
-    elif n == 5:  # 5R Robot
-        features = tf.stack([tf.cos(theta[0]), tf.sin(theta[0]),
-                             tf.cos(theta[1]), tf.sin(theta[1]),
-                             tf.cos(theta[2]), tf.sin(theta[2]),
-                             tf.cos(theta[3]), tf.sin(theta[3]),
-                             tf.cos(theta[4]), tf.sin(theta[4])])
+    if raw:
+        features = tf.convert_to_tensor(theta, dtype=tf.float32)
     else:
-        raise ValueError("Error! size of theta must be 2, 3, or 5!")
+        theta = tf.convert_to_tensor(theta, dtype=tf.float32) 
+        n = theta.shape[0]
+        if n == 2:    # 2R Robot
+            features = tf.stack([tf.cos(theta[0]), tf.sin(theta[0]),
+                                tf.cos(theta[1]), tf.sin(theta[1])])
+        elif n == 3:  # 3R Robot
+            features = tf.stack([tf.cos(theta[0]), tf.sin(theta[0]),
+                                tf.cos(theta[1]), tf.sin(theta[1]),
+                                tf.cos(theta[2]), tf.sin(theta[2])])
+        elif n == 5:  # 5R Robot
+            features = tf.stack([tf.cos(theta[0]), tf.sin(theta[0]),
+                                tf.cos(theta[1]), tf.sin(theta[1]),
+                                tf.cos(theta[2]), tf.sin(theta[2]),
+                                tf.cos(theta[3]), tf.sin(theta[3]),
+                                tf.cos(theta[4]), tf.sin(theta[4])])
+
+        else:
+            raise ValueError("Error! size of theta must be 2, 3, or 5!")
     
     # Reshape to batch size 1
     t = tf.reshape(features, shape=(1, features.shape[0]))
@@ -89,7 +122,7 @@ def dispFK_2R(model: Model, theta: tuple, display_error: bool=False):
 
     model: The end-effector predicted position
     theta: The joint angles for the 2R robot
-    display_error: Boolean to compute the relative error between analytical and ML
+    display_error: Boolean to compute the euclidian error between analytical and ML
     """
     ee_x_pred, ee_y_pred = model 
 
@@ -121,8 +154,8 @@ def dispFK_2R(model: Model, theta: tuple, display_error: bool=False):
     if display_error:
         predicted_val = np.array([ee_x_pred, ee_y_pred])
         real_val = np.array([x2, y2])
-        rel_error = np.abs(predicted_val-real_val)/np.abs(real_val)
-        print(f"Relative error (%): {rel_error*100}")
+        error = euclidean_error(real_val, predicted_val)
+        print(f"Distance error: {error}\n")
 
 
 def dispFK_3R(model: Model, theta: tuple, display_error: bool=False):
@@ -131,7 +164,7 @@ def dispFK_3R(model: Model, theta: tuple, display_error: bool=False):
 
     model: The end-effector predicted position
     theta: The joint angles for the 3R robot
-    display_error: Boolean to compute the relative error between analytical and ML
+    display_error: Boolean to compute the euclidian error between analytical and ML
     """
     ee_x_pred, ee_y_pred = model 
 
@@ -166,23 +199,24 @@ def dispFK_3R(model: Model, theta: tuple, display_error: bool=False):
     if display_error:
         predicted_val = np.array([ee_x_pred, ee_y_pred])
         real_val = np.array([x3, y3])
-        rel_error = np.abs(predicted_val-real_val)/np.abs(real_val)
-        print(f"Relative error (%): {rel_error*100}")
+        error = euclidean_error(real_val, predicted_val)
+        print(f"Distance error: {error}\n")
 
 
 @tf.function
-def FK_Jacobian_pred(model: Model, x: tuple):
+def FK_Jacobian_pred(model: Model, x: tuple, raw: bool):
     """
     Computes the Forward Kinematics Jacobian matrix
     
     @param model: The machine learning model
     @param x: The tuple of angle inputs
+    @param raw: To specify if we use raw angles or cosines features
     """
     theta = tf.convert_to_tensor(x, dtype=tf.float32)
 
     with tf.GradientTape(persistent=True) as tape:
         tape.watch(theta)
-        y = FK(model, theta)
+        y = FK(model, theta, raw)
         n = theta.shape[0]
         output_shape = model.output_shape[0]
 
@@ -228,19 +262,20 @@ def FK_Jacobian_analytic_3R(theta: float) -> np.ndarray:
     return analytical_J
 
 
-def IK_Newton_Raphson(target_pos: tuple, initial_theta: tuple, model, max_iters=100, tolerance=1e-6) -> np.ndarray:
+def IK_Newton_Raphson(target_pos: tuple, initial_theta: tuple, model, raw:bool, max_iters=100, tolerance=1e-6) -> np.ndarray:
     '''
     Computes The Inverse Kinematics using the Newton-Raphson method for a 2R robot.
 
     @param target_pos: The target end-effector position 
     @param initial_theta: The initial value of joint angles
     @param model: The machine learning model
+    @param raw: To specify if we use raw angles or cosines features
     @param max_iters: The maximum number of iterations
     @param tolerance: The tolerance for convergence
     '''
     theta = np.array(initial_theta, dtype=np.float32)
     for step in range(max_iters):
-        current_pos = FK(model, theta)[:2]
+        current_pos = FK(model, theta, raw)[:2]
         print(f"===== Step n°{step} =====")
         print(f"Current Position: {current_pos}")
         print(f"Intermediate joint angles: {theta}\n")
@@ -252,7 +287,7 @@ def IK_Newton_Raphson(target_pos: tuple, initial_theta: tuple, model, max_iters=
         if np.linalg.norm(error) < tolerance:
             break
 
-        J = FK_Jacobian_pred(model, theta)
+        J = FK_Jacobian_pred(model, theta, raw)
 
         dtheta = (tf.linalg.pinv(J) @ error)
         theta += dtheta.numpy().flatten()
@@ -264,16 +299,17 @@ def IK_Newton_Raphson(target_pos: tuple, initial_theta: tuple, model, max_iters=
     return theta
 
 
-def dispIK_2R(model: Model, target_position: tuple, initial_guess: tuple, display_error: bool=False):
+def dispIK_2R(model: Model, target_position: tuple, initial_guess: tuple, raw: bool, display_error: bool=False):
     """
     Plots the Inverse Kinematics 2R comparison between the initial and final positions
 
-    model: The trained model for predicting end-effector position
-    target_position: The desired end-effector position (x, y)
-    initial_guess: Initial joint angles (j0, j1)
-    display_error: Boolean to compute the relative error between analytical and ML
+    @param model: The trained model for predicting end-effector position
+    @param target_position: The desired end-effector position (x, y)
+    @param initial_guess: Initial joint angles (j0, j1)
+    @param raw: To specify if we use raw angles or cosines features
+    @param display_error: Boolean to compute the relative error between analytical and ML
     """
-    theta_solution = IK_Newton_Raphson(target_position, initial_guess, model)
+    theta_solution = IK_Newton_Raphson(target_position, initial_guess, model, raw)
     
     # Initial guess
     j0_initial, j1_initial = initial_guess
@@ -290,7 +326,7 @@ def dispIK_2R(model: Model, target_position: tuple, initial_guess: tuple, displa
     y2_final = y1_final + l2 * np.sin(j0_final + j1_final)
 
     # FK predicted end-effector position
-    ee_pred = FK(model, theta_solution)
+    ee_pred = FK(model, theta_solution, raw)
     ee_x_pred, ee_y_pred = ee_pred[:2]
 
     fig, axis = plt.subplots(1, 2, figsize=(12, 6))
@@ -326,20 +362,21 @@ def dispIK_2R(model: Model, target_position: tuple, initial_guess: tuple, displa
     if display_error:
         predicted_val = np.array([ee_x_pred, ee_y_pred])
         real_val = np.array([x2_final, y2_final])
-        rel_error = np.abs(predicted_val-real_val)/np.abs(real_val)
-        print(f"Relative error (%): {rel_error*100}")
+        error = euclidean_error(real_val, predicted_val)
+        print(f"Distance error: {error}\n")
 
 
-def dispIK_3R(model: Model, target_position: tuple, initial_guess: tuple, display_error: bool=False):
+def dispIK_3R(model: Model, target_position: tuple, initial_guess: tuple, raw: bool, display_error: bool=False):
     """
     Plots the Inverse Kinematics 3R comparison between the initial and final positions
 
-    model: The trained model for predicting end-effector position
-    target_position: The desired end-effector position (x, y)
-    initial_guess: Initial joint angles (j0, j1, j2)
-    display_error: Boolean to compute the relative error between analytical and ML
+    @param model: The trained model for predicting end-effector position
+    @param target_position: The desired end-effector position (x, y)
+    @param initial_guess: Initial joint angles (j0, j1, j2)
+    @param raw: To specify if we use raw angles or cosines features
+    @param display_error: Boolean to compute the euclidian error between analytical and ML
     """
-    theta_solution = IK_Newton_Raphson(target_position, initial_guess, model)
+    theta_solution = IK_Newton_Raphson(target_position, initial_guess, model, raw)
     
     # Initial guess
     j0_initial, j1_initial, j2_initial = initial_guess
@@ -360,7 +397,7 @@ def dispIK_3R(model: Model, target_position: tuple, initial_guess: tuple, displa
     y3_final = y2_final + l3 * np.sin(j0_final + j1_final + j2_final)
 
 
-    ee_pred = FK(model, theta_solution)
+    ee_pred = FK(model, theta_solution, raw)
     ee_x_pred, ee_y_pred = ee_pred[:2]
 
 
@@ -399,6 +436,6 @@ def dispIK_3R(model: Model, target_position: tuple, initial_guess: tuple, displa
     if display_error:
         predicted_val = np.array([ee_x_pred, ee_y_pred])
         real_val = np.array([x3_final, y3_final])
-        rel_error = np.abs(predicted_val-real_val)/np.abs(real_val)
-        print(f"Relative error (%): {rel_error*100}")
+        error = euclidean_error(real_val, predicted_val)
+        print(f"Distance error: {error}\n")
 
