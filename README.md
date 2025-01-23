@@ -3,9 +3,14 @@ Machine learning project to control a robotic arm in the MuJoCo simulation envir
 
 # How to run the robot simulations 
 
+Download the required packages:
+```
+pip install -r requirements.txt
+```
+
 Download the repository:
 
-```
+```bash
 git clone https://github.com/Mowibox/Mujoco-ML.git
 ```
 
